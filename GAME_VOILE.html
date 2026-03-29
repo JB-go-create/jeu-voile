@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Jeu de Voile</title>
+
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: #87CEEB;
+    font-family: Arial, sans-serif;
+  }
+
+  canvas {
+    display: block;
+    background: linear-gradient(#4fc3f7, #01579b);
+  }
+
+  #score {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    color: white;
+    font-size: 20px;
+    z-index: 5;
+  }
+
+  /* Boutons tactiles */
+  .touch-controls {
+    position: fixed;
+    bottom: 20px;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  .btn {
+    width: 45%;
+    height: 100px;
+    background: rgba(255,255,255,0.25);
+    border: 2px solid white;
+    border-radius: 15px;
+    font-size: 30px;
+    color: white;
+    pointer-events: auto;
+    user-select: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .btn:active {
+    background: rgba(255,255,255,0.5);
+  }
+
+  /* Menu de démarrage */
+  #startMenu, #gameOverMenu {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.65);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    font-size: 32px;
+    z-index: 20;
+  }
+
+  #startButton, #restartButton {
+    margin-top: 20px;
+    padding: 15px 40px;
+    font-size: 28px;
+    background: #ff5252;
+    border: none;
+    border-radius: 10px;
+    color: white;
+    cursor: pointer;
+  }
+
+  #startButton:active, #restartButton:active {
+    background: #ff7979;
+  }
+
+  /* Berges */
+  .bank {
+    position: fixed;
+    top: 0;
+    width: 40px;
+    height: 100%;
+    background: #3e2723;
+    z-index: 3;
+  }
+
+  #leftBank { left: 0; }
+  #rightBank { right: 0; }
+
+</style>
+</head>
+
+<body>
+
+<div id="score">Score: 0</div>
+
+<!-- Berges -->
+<div id="leftBank" class="bank"></div>
+<div id="rightBank" class="bank"></div>
+
+<!-- Menu de démarrage -->
+<div id="startMenu">
+  <div>🚤 Jeu de Voile de Greg (Joyeux Anniversaire!)</div>
+  <button id="startButton">Jouer</button>
+</div>
+
+<!-- Game Over -->
+<div id="gameOverMenu" style="display:none;">
+  <div id="gameOverText">Game Over</div>
+  <button id="restartButton">Recommencer</button>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<!--  Boutons tactiles -->
+<div class="touch-controls">
+  <div id="btnLeft" class="btn">⬅️</div>
+  <div id="btnRight" class="btn">➡️</div>
+</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let keys = {};
+let score = 0;
+let wind = 0;
+let gameStarted = false;
+let gameOver = false;
+
+// Bateau
+const boat = {
+  x: canvas.width / 2,
+  y: canvas.height - 120,
+  width: 40,
+  height: 60,
+  velocityX: 0,
+  maxSpeed: 6,
+  acceleration: 0.3,
+  friction: 0.95
+};
+
+// Obstacles
+let obstacles = [];
+
+function spawnObstacle() {
+  obstacles.push({
+    x: 40 + Math.random() * (canvas.width - 80),
+    y: -50,
+    size: 25 + Math.random() * 25,
+    speed: 2 + Math.random() * 2
+  });
+}
+setInterval(spawnObstacle, 900);
+
+// Clavier
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup", e => keys[e.key] = false);
+
+// Boutons tactiles
+function setupTouchButton(btn, keyName) {
+  btn.addEventListener("touchstart", () => keys[keyName] = true);
+  btn.addEventListener("touchend", () => keys[keyName] = false);
+  btn.addEventListener("touchcancel", () => keys[keyName] = false);
+}
+
+setupTouchButton(document.getElementById("btnLeft"), "ArrowLeft");
+setupTouchButton(document.getElementById("btnRight"), "ArrowRight");
+
+// Vent
+setInterval(() => {
+  wind = (Math.random() - 0.5) * 1.5;
+}, 2000);
+
+// Démarrage du jeu
+document.getElementById("startButton").addEventListener("click", () => {
+  document.getElementById("startMenu").style.display = "none";
+  gameStarted = true;
+});
+
+// Recommencer
+document.getElementById("restartButton").addEventListener("click", () => {
+  location.reload();
+});
+
+// Dessin bateau
+function drawBoat() {
+  ctx.save();
+  ctx.translate(boat.x, boat.y);
+  ctx.rotate(boat.velocityX * 0.05);
+
+  ctx.fillStyle = "white";
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(boat.width / 2, boat.height);
+  ctx.lineTo(-boat.width / 2, boat.height);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "red";
+  ctx.fillRect(-5, -30, 10, 30);
+
+  ctx.restore();
+}
+
+// Obstacles
+function drawObstacles() {
+  ctx.fillStyle = "#5d4037";
+  obstacles.forEach(o => {
+    ctx.beginPath();
+    ctx.arc(o.x, o.y, o.size, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+// Collision
+function checkCollision(o) {
+  let dx = boat.x - o.x;
+  let dy = (boat.y + 30) - o.y;
+  let distance = Math.sqrt(dx * dx + dy * dy);
+  return distance < o.size + 20;
+}
+
+// Collision berges
+function checkBankCollision() {
+  return boat.x < 60 || boat.x > canvas.width - 60;
+}
+
+// Update
+function update() {
+  if (gameOver) return;
+
+  if (keys["ArrowLeft"]) boat.velocityX -= boat.acceleration;
+  if (keys["ArrowRight"]) boat.velocityX += boat.acceleration;
+
+  boat.velocityX += wind * 0.1;
+  boat.velocityX *= boat.friction;
+
+  boat.velocityX = Math.max(-boat.maxSpeed, Math.min(boat.maxSpeed, boat.velocityX));
+  boat.x += boat.velocityX;
+
+  // Berges = Game Over
+  if (checkBankCollision()) {
+    triggerGameOver();
+  }
+
+  obstacles.forEach(o => o.y += o.speed);
+
+  for (let o of obstacles) {
+    if (checkCollision(o)) {
+      triggerGameOver();
+    }
+  }
+
+  obstacles = obstacles.filter(o => o.y < canvas.height);
+
+  score++;
+  document.getElementById("score").innerText = "Score: " + score;
+}
+
+// Game Over
+function triggerGameOver() {
+  gameOver = true;
+  document.getElementById("gameOverText").innerText = "Game Over ! Score : " + score;
+  document.getElementById("gameOverMenu").style.display = "flex";
+}
+
+// Loop
+function gameLoop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (gameStarted && !gameOver) {
+    drawBoat();
+    drawObstacles();
+    update();
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+</script>
+
+</body>
+</html>
